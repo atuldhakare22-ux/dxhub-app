@@ -44,6 +44,11 @@ jobs:
           }
           EOF
 
+          cat << 'EOF' > gradle.properties
+          android.useAndroidX=true
+          android.nonTransitiveRClass=false
+          EOF
+
           cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
