@@ -16,8 +16,8 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           rm -f settings.gradle.txt build.gradle.txt
-          rm -rf app/src/main/java/com/dxhub/player
-          mkdir -p app/src/main/java/com/dxhub/player
+          rm -rf app/src/main/java/com/dxhub/player app/src/main/res
+          mkdir -p app/src/main/java/com/dxhub/player app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi
 
           cat << 'EOF' > settings.gradle
           pluginManagement {
@@ -83,6 +83,21 @@ jobs:
           }
           EOF
 
+          python3 -c '
+          from PIL import Image, ImageDraw, ImageFont
+          for folder, size in [("mipmap-mdpi",48),("mipmap-hdpi",72),("mipmap-xhdpi",96),("mipmap-xxhdpi",144),("mipmap-xxxhdpi",192)]:
+              img = Image.new("RGBA", (size, size), (2, 132, 199, 255))
+              d = ImageDraw.Draw(img)
+              pad = max(2, size // 10)
+              d.rounded_rectangle([pad, pad, size - pad, size - pad], radius=max(6, size // 5), fill=(14, 165, 233, 255), outline=(224, 242, 254, 255), width=max(1, size // 32))
+              txt = "DX"
+              font = ImageFont.load_default()
+              bbox = d.textbbox((0, 0), txt, font=font)
+              tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+              d.text(((size - tw) / 2, (size - th) / 2), txt, fill=(255, 255, 255, 255), font=font)
+              img.save(f"app/src/main/res/{folder}/ic_launcher.png")
+          '
+
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -90,6 +105,7 @@ jobs:
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
               <application
                   android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
                   android:label="DX HUB"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
                   android:usesCleartextTraffic="true">
@@ -116,6 +132,9 @@ jobs:
           package com.dxhub.player;
 
           import android.annotation.SuppressLint;
+          import android.content.ClipData;
+          import android.content.ClipboardManager;
+          import android.content.Context;
           import android.content.Intent;
           import android.net.Uri;
           import android.os.Bundle;
@@ -165,22 +184,38 @@ jobs:
                   });
 
                   String deepVidId = "";
-                  boolean autoUnlock = false;
                   Uri data = getIntent().getData();
                   if (data != null) {
                       String path = data.getPath();
                       if (path != null && path.length() > 1) {
                           deepVidId = path.substring(1);
                       }
-                      if ("DX1234".equals(data.getQueryParameter("unlock"))) {
-                          autoUnlock = true;
-                      }
                   }
 
-                  webView.loadDataWithBaseURL(SERVER_URL, buildAppHtml(deepVidId, autoUnlock), "text/html", "UTF-8", null);
+                  webView.loadDataWithBaseURL(SERVER_URL, buildAppHtml(deepVidId), "text/html", "UTF-8", null);
               }
 
               public class DXBridge {
+                  @JavascriptInterface
+                  public void copyToClipboard(String text) {
+                      runOnUiThread(() -> {
+                          ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                          if (cm != null) {
+                              cm.setPrimaryClip(ClipData.newPlainText("DX HUB Link", text));
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void shareText(String text) {
+                      runOnUiThread(() -> {
+                          Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                          sendIntent.putExtra(Intent.EXTRA_TEXT, text);
+                          sendIntent.setType("text/plain");
+                          startActivity(Intent.createChooser(sendIntent, "Share DX HUB"));
+                      });
+                  }
+
                   @JavascriptInterface
                   public void downloadEncryptedVideo(String vidId, String fileName) {
                       new Thread(() -> {
@@ -223,105 +258,327 @@ jobs:
                   else super.onBackPressed();
               }
 
-              private String buildAppHtml(String deepVidId, boolean autoUnlock) {
+              private String buildAppHtml(String deepVidId) {
                   return "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>" +
                          "<style>" +
                          "*{box-sizing:border-box;font-family:sans-serif;margin:0;padding:0}" +
-                         "body{background:#090d11;color:#fff;padding-bottom:30px}" +
-                         ".header{background:#111820;padding:15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1f2937}" +
-                         ".logo{font-size:20px;font-weight:800;color:#10b981;letter-spacing:1px}" +
-                         ".badge{background:#f59e0b;color:#000;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold}" +
-                         ".card{background:#131b24;margin:12px;padding:15px;border-radius:14px;border:1px solid #1e293b}" +
-                         ".btn{background:#10b981;color:#fff;border:none;padding:13px;width:100%;border-radius:10px;font-size:15px;font-weight:bold;margin-top:10px;cursor:pointer}" +
-                         ".btn-gold{background:linear-gradient(90deg,#f59e0b,#d97706);color:#000}" +
-                         ".btn-blue{background:#2563eb}" +
-                         "input{width:100%;padding:12px;border-radius:10px;border:1px solid #334155;background:#090d11;color:#fff;margin-top:8px;font-size:15px}" +
-                         ".ad-mrec{width:300px;height:250px;background:#1e293b;border:1px dashed #475569;margin:12px auto;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;color:#94a3b8;text-align:center}" +
-                         ".ad-banner{width:100%;height:55px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8}" +
+                         "body{background:#e0f2fe;color:#0f172a;padding-bottom:76px}" +
+                         ".header{background:#ffffff;padding:14px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #bae6fd;position:sticky;top:0;z-index:20}" +
+                         ".logo{font-size:20px;font-weight:800;color:#0284c7;letter-spacing:1px;user-select:none;cursor:pointer}" +
+                         ".right-controls{display:flex;align-items:center;gap:8px}" +
+                         ".badge{background:#0284c7;color:#ffffff;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:bold;cursor:pointer}" +
+                         ".lock-btn{background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;padding:5px 11px;border-radius:20px;font-size:14px;font-weight:bold;cursor:pointer}" +
+                         ".card{background:#ffffff;margin:12px;padding:15px;border-radius:14px;border:1px solid #bae6fd}" +
+                         ".btn{background:#0284c7;color:#ffffff;border:none;padding:12px;width:100%;border-radius:10px;font-size:14px;font-weight:bold;margin-top:8px;cursor:pointer}" +
+                         ".btn-sm{padding:8px 10px;font-size:12px;width:auto;margin-top:6px;margin-right:6px;display:inline-block}" +
+                         ".btn-gold{background:#0369a1;color:#ffffff}" +
+                         ".btn-blue{background:#0ea5e9;color:#ffffff}" +
+                         "input,select,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #7dd3fc;background:#f8fafc;color:#0f172a;margin-top:8px;font-size:14px}" +
+                         ".mini-ad-box{background:#dbeafe;border:1px dashed #38bdf8;margin:10px 12px;padding:10px;border-radius:12px;color:#0369a1;text-align:center}" +
+                         ".mini-vid{width:100%;height:130px;border-radius:8px;background:#0f172a;margin-top:6px;object-fit:cover}" +
+                         ".ad-banner{width:100%;height:52px;background:#dbeafe;border-bottom:1px solid #7dd3fc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#0369a1}" +
                          ".hidden{display:none!important}" +
                          "video{width:100%;background:#000;max-height:240px}" +
                          ".grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}" +
-                         ".vitem{background:#0f172a;padding:8px;border-radius:10px;font-size:12px}" +
+                         ".vitem{background:#f0f9ff;padding:8px;border-radius:10px;font-size:12px;border:1px solid #bae6fd}" +
                          ".vitem img{width:100%;height:85px;object-fit:cover;border-radius:6px}" +
-                         ".overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}" +
+                         ".hub-item{background:#f0f9ff;padding:10px;border-radius:10px;margin-top:10px;border:1px solid #bae6fd}" +
+                         ".hub-item img{width:100%;height:130px;object-fit:cover;border-radius:8px;margin-bottom:8px}" +
+                         ".link-box{background:#ffffff;padding:8px;border-radius:8px;font-size:11px;color:#0369a1;word-break:break-all;margin-top:6px;border:1px solid #bae6fd}" +
+                         ".stat-row{display:flex;gap:8px;margin-top:10px}" +
+                         ".stat-box{flex:1;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;text-align:center}" +
+                         ".policy-box{background:#f8fafc;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-top:8px;font-size:12px;color:#334155;line-height:1.5}" +
+                         ".bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#ffffff;border-top:1px solid #bae6fd;display:flex;justify-content:space-around;padding:8px 4px;z-index:25}" +
+                         ".nav-btn{background:none;border:none;color:#64748b;font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 6px}" +
+                         ".nav-btn.active{color:#0284c7}" +
+                         ".overlay{position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}" +
                          "</style></head><body>" +
-                         "<div id='lockScreen' class='overlay'>" +
-                         "<h2 style='color:#10b981;margin-bottom:8px'>DX Vault Calc</h2>" +
-                         "<p style='color:#94a3b8;font-size:13px;margin-bottom:15px'>Enter 4-Digit Security PIN to Unlock</p>" +
-                         "<input type='password' id='pinInput' maxlength='4' placeholder='Enter PIN (1234)' style='max-width:220px;text-align:center;font-size:20px;letter-spacing:6px'>" +
-                         "<button class='btn' style='max-width:220px' onclick='checkPin()'>UNLOCK</button>" +
-                         "</div>" +
+
+                         "<div id='adminAuthModal' class='overlay hidden'>" +
+                         "<div class='card' style='max-width:320px;width:100%'>" +
+                         "<h3 style='color:#0284c7'>Admin Login</h3>" +
+                         "<p style='font-size:12px;color:#475569;margin-top:4px'>Enter Admin Password</p>" +
+                         "<input type='password' id='adminPassInput' placeholder='Admin Password'>" +
+                         "<button class='btn' onclick='verifyAdminPass()'>Unlock Admin Panel</button>" +
+                         "<button class='btn' style='background:#64748b' onclick='closeModals()'>Cancel</button>" +
+                         "</div></div>" +
+
+                         "<div id='userLockModal' class='overlay hidden'>" +
+                         "<div class='card' style='max-width:320px;width:100%'>" +
+                         "<h3 style='color:#0284c7'>🔒 Protected Links</h3>" +
+                         "<p style='font-size:12px;color:#475569;margin-top:4px'>Enter PIN 1234</p>" +
+                         "<input type='password' id='userPinInput' maxlength='4' placeholder='Enter PIN (1234)' style='text-align:center;font-size:18px;letter-spacing:5px'>" +
+                         "<button class='btn' onclick='verifyUserPin()'>Open</button>" +
+                         "<button class='btn' style='background:#64748b' onclick='closeModals()'>Cancel</button>" +
+                         "</div></div>" +
+
                          "<div id='rewardOverlay' class='overlay hidden'>" +
-                         "<div class='badge'>REWARDED VIDEO AD</div>" +
-                         "<h2 style='margin:15px 0' id='adTimerText'>Reward in 15s...</h2>" +
-                         "<div class='ad-mrec'><b style='color:#fff'>SPONSORED AD</b><br><small id='adUnitLabel'>Test Rewarded Ad (15s)</small></div>" +
+                         "<div class='badge'>VIDEO AD</div>" +
+                         "<h2 style='margin:15px 0;color:#ffffff' id='adTimerText'>Ad in 15s...</h2>" +
+                         "<div class='mini-ad-box' style='width:300px'><b>SPONSORED VIDEO AD</b><br><small id='adUnitLabel'>Unit: TEST</small></div>" +
                          "<button id='closeAdBtn' class='btn hidden' style='max-width:220px' onclick='finishRewardAd()'>Continue to File ▶</button>" +
                          "</div>" +
-                         "<div id='mainApp' class='hidden'>" +
-                         "<div class='header'><div class='logo'>DX HUB</div><div id='vipBadge' class='badge' onclick='openPremium()'>GO PREMIUM</div></div>" +
+
+                         "<div class='header'>" +
+                         "<div class='logo' onclick='handleLogoDoubleClick()'>DX HUB</div>" +
+                         "<div class='right-controls'>" +
+                         "<div id='vipBadge' class='badge' onclick=\"switchTab('premium')\">GO PREMIUM</div>" +
+                         "<button class='lock-btn' onclick='openUserLockModal()'>🔒</button>" +
+                         "</div></div>" +
+
+                         "<!-- SHARED MINI VIDEO AD SLOT (Active across pages) -->" +
+                         "<div id='globalMiniAd' class='mini-ad-box'>" +
+                         "<div style='font-size:11px;font-weight:700'>▶ MINI VIDEO AD (<span id='miniAdLabel'>TEST</span>)</div>" +
+                         "<video id='miniAdVideo' class='mini-vid' autoplay muted loop playsinline src='" + SERVER_URL + "/stream/sample'></video>" +
+                         "</div>" +
+
+                         "<!-- 1. HOME PAGE -->" +
                          "<div id='homeView'>" +
-                         "<div class='card'><h3>🔗 Paste Video Link</h3>" +
-                         "<input id='linkBox' placeholder='Paste dxhub link or Video ID...'>" +
-                         "<button class='btn' onclick='openFromInput()'>Open & Stream Video</button></div>" +
-                         "<div id='homeMrec' class='ad-mrec'><b>MREC AD (300x250)</b><small>Auto-Playing Ad Slot</small></div>" +
+                         "<div class='card'><h3>🔗 Paste File Link</h3>" +
+                         "<input id='linkBox' placeholder='Paste https://dxhub-server.onrender.com/watch/...'>" +
+                         "<button class='btn' onclick='openFromInput()'>Open File (Ad -> Play)</button></div>" +
+
                          "<div class='card'><h3>📥 Your Downloads (Offline Vault)</h3>" +
-                         "<p style='font-size:12px;color:#94a3b8;margin-top:4px'>Saved inside DX HUB only (Encrypted)</p>" +
-                         "<div id='downloadsList' style='margin-top:10px;font-size:13px;color:#cbd5e1'>No offline videos yet.</div></div>" +
-                         "<div class='card' style='border-color:#f59e0b'><h3>👑 Go Premium (Ad-Free)</h3>" +
-                         "<p style='font-size:13px;color:#cbd5e1;margin-top:5px'>Remove all 15s Rewarded & MREC Ads for 30 Days (₹299/month).</p>" +
-                         "<button class='btn btn-gold' onclick=\"window.location.href='https://t.me/helponn_bot'\">Buy Key via @helponn_bot</button>" +
+                         "<p style='font-size:12px;color:#475569;margin-top:4px'>Saved inside DX HUB only</p>" +
+                         "<div id='downloadsList' style='margin-top:10px;font-size:13px;color:#334155'>No offline files yet.</div></div>" +
+                         "</div>" +
+
+                         "<!-- 2. PREMIUM PAGE (Custom Image + Caption + Link) -->" +
+                         "<div id='premiumView' class='hidden'>" +
+                         "<div class='card'><h3>👑 Premium Plan</h3>" +
+                         "<img id='premImgView' src='" + SERVER_URL + "/api/thumb/premium' onerror=\"this.style.display='none'\" style='width:100%;height:150px;object-fit:cover;border-radius:10px;margin-top:8px;background:#dbeafe'>" +
+                         "<p id='premCaptionView' style='font-size:13px;color:#0f172a;margin-top:10px;line-height:1.4'>Remove all Ads for 30 Days (₹299/month). Contact support to get your VIP Key.</p>" +
+                         "<button id='premLinkBtnView' class='btn btn-gold' onclick='openPremiumLink()'>Open Premium / Helpline Link</button>" +
                          "<input id='vipKeyInput' placeholder='Enter VIP Key (DXVIP-XXXX)'>" +
                          "<button class='btn btn-blue' onclick='activateVip()'>Activate VIP Key</button></div>" +
                          "</div>" +
-                         "<div id='unlockerView' class='hidden'>" +
-                         "<div id='mrec1' class='ad-mrec'><b>MREC AD #1 (300x250)</b><small>Sponsored</small></div>" +
-                         "<div class='card' style='text-align:center'><h3 id='unlockFileTitle'>File Ready</h3>" +
-                         "<p style='font-size:12px;color:#94a3b8;margin-top:5px'>Click below & watch 15s ad to unlock stream</p>" +
-                         "<button class='btn' onclick=\"triggerReward('stream')\">🔓 Open File Now</button></div>" +
-                         "<div id='mrec2' class='ad-mrec'><b>MREC AD #2 (300x250)</b><small>Sponsored</small></div>" +
+
+                         "<!-- 3. PUBLISHER PAGE (CPM + Dollar Earning + Telegram Connect) -->" +
+                         "<div id='publisherView' class='hidden'>" +
+                         "<div class='card'><h3>📢 Publisher Dashboard</h3>" +
+                         "<p style='font-size:12px;color:#475569;margin-top:4px'>Connect Telegram & track views/earnings</p>" +
+                         "<input id='pubChatInput' placeholder='Enter Publisher Telegram ID / Chat ID'>" +
+                         "<button class='btn btn-blue' onclick='connectTelegramPublisher()'>Connect Telegram & Load</button>" +
+                         "<div class='stat-row'>" +
+                         "<div class='stat-box'><div style='font-size:11px;color:#475569'>CPM Rate</div><b id='pubCpmText' style='font-size:16px;color:#0284c7'>$4.00</b></div>" +
+                         "<div class='stat-box'><div style='font-size:11px;color:#475569'>Counted Views</div><b id='pubViewsText' style='font-size:16px;color:#0284c7'>0</b></div>" +
+                         "<div class='stat-box'><div style='font-size:11px;color:#475569'>Est. Earning</div><b id='pubEarnText' style='font-size:16px;color:#0369a1'>$0.00</b></div>" +
                          "</div>" +
+                         "<div id='pubFilesList'></div>" +
+                         "</div></div>" +
+
+                         "<!-- 4. ABOUT US PAGE (Contact Us + Privacy Policy + Share App) -->" +
+                         "<div id='aboutView' class='hidden'>" +
+                         "<div class='card'><h3>ℹ️ About DX HUB</h3>" +
+                         "<p style='font-size:13px;color:#334155;margin-top:6px'>DX HUB file sharing & media streaming utility.</p>" +
+                         "<button class='btn' onclick='shareDxApp()'>📤 Share App</button>" +
+                         "<button class='btn btn-blue' onclick='openContactUs()'>📩 Contact Us</button>" +
+                         "<h4 style='margin-top:14px;color:#0284c7'>Privacy Policy</h4>" +
+                         "<div class='policy-box'>" +
+                         "<b>1. Data & Privacy:</b> DX HUB processes link/stream requests, session/IP view limits, and optional publisher identifiers solely to deliver requested files and view statistics. We do not sell personal user data.<br>" +
+                         "<b>2. Ads & External Links:</b> Ads and external links (such as Telegram/support links) follow their respective platform terms and policies.<br>" +
+                         "<b>3. Content & Support:</b> Users and publishers are responsible for shared links/files. Reach out via Contact Us for support or policy requests." +
+                         "</div></div></div>" +
+
+                         "<!-- PROTECTED LINKS VIEW (Right Lock -> PIN 1234) -->" +
+                         "<div id='vaultView' class='hidden'>" +
+                         "<div class='card'><h2>🔓 Protected File Links</h2>" +
+                         "<input id='vaultPubInput' placeholder='Enter Publisher / Telegram Chat ID'>" +
+                         "<button class='btn' onclick='loadVaultLinks()'>Load Thumbnails & Links</button>" +
+                         "<button class='btn' style='background:#64748b' onclick=\"switchTab('home')\">⬅ Back to Home</button>" +
+                         "<div id='vaultList'></div></div></div>" +
+
+                         "<!-- PLAYER VIEW -->" +
                          "<div id='playerView' class='hidden'>" +
-                         "<div id='topBanner' class='ad-banner'>HEADER BANNER AD (Auto-Refresh 30s)</div>" +
+                         "<div id='topBanner' class='ad-banner'>HEADER BANNER AD</div>" +
                          "<video id='vidPlayer' controls playsinline></video>" +
-                         "<div class='card'><h3 id='playerTitle'>Video</h3>" +
-                         "<button class='btn' onclick=\"triggerReward('download')\">⬇️ Download Offline (In-App)</button>" +
-                         "<button class='btn' style='background:#334155' onclick='showHome()'>⬅ Back to Home</button></div>" +
-                         "<div id='playerMrec' class='ad-mrec'><b>MREC BOX AD (Auto-Refresh 30s)</b><small>300x250 Display</small></div>" +
-                         "<div class='card'><h3>📂 More Videos</h3><div id='moreGrid' class='grid'></div></div>" +
+                         "<div class='card'><h3 id='playerTitle'>File</h3>" +
+                         "<button class='btn' onclick=\"triggerReward('download')\">⬇️ Download Offline</button>" +
+                         "<button class='btn' style='background:#64748b' onclick=\"switchTab('home')\">⬅ Back to Home</button></div>" +
+                         "<div class='card'><h3>📂 More Files</h3><div id='moreGrid' class='grid'></div></div>" +
                          "</div>" +
+
+                         "<!-- ADMIN PANEL (2 Taps on DX HUB -> Password) -->" +
                          "<div id='adminView' class='hidden'>" +
-                         "<div class='card'><h2>👑 DX HUB Admin Control</h2>" +
-                         "<p style='font-size:12px;color:#94a3b8'>Control Ads without rebuilding APK</p>" +
-                         "<label style='display:block;margin-top:12px'>Ad Status:</label>" +
-                         "<select id='admAdsOn' style='width:100%;padding:10px;background:#090d11;color:#fff;margin-top:5px'><option value='1'>Ads Enabled (ON)</option><option value='0'>Ads Disabled (OFF)</option></select>" +
-                         "<input id='admBanner' placeholder='AppLovin Banner Unit ID'>" +
-                         "<input id='admMrec' placeholder='AppLovin MREC Unit ID'>" +
-                         "<input id='admReward' placeholder='AppLovin Rewarded Unit ID'>" +
-                         "<button class='btn' onclick='saveAdmin()'>Save Admin Settings</button>" +
-                         "<button class='btn' style='background:#334155' onclick='showHome()'>Exit Admin</button></div>" +
+                         "<div class='card'><h2>👑 DX HUB Admin Panel</h2>" +
+                         "<label style='display:block;margin-top:8px;font-size:12px'>Ads & Mini Video Ad:</label>" +
+                         "<select id='admAdsOn'><option value='1'>Ads Enabled (ON)</option><option value='0'>Ads Disabled (OFF)</option></select>" +
+                         "<input id='admBanner' placeholder='Banner Ad Unit ID'>" +
+                         "<input id='admMrec' placeholder='MREC Ad Unit ID'>" +
+                         "<input id='admReward' placeholder='Rewarded Ad Unit ID'>" +
+                         "<label style='display:block;margin-top:10px;font-size:12px'>Publisher & View Rules:</label>" +
+                         "<input id='admCpm' placeholder='Publisher CPM in USD (e.g. 4.00)'>" +
+                         "<input id='admIpLimit' placeholder='Max Views per IP (e.g. 1)'>" +
+                         "<input id='admViewPct' placeholder='View Count % (e.g. 100)'>" +
+                         "<label style='display:block;margin-top:10px;font-size:12px'>Premium Card (Image + Caption + Link):</label>" +
+                         "<input id='admPremImg' placeholder='Premium Image URL'>" +
+                         "<input id='admPremCaption' placeholder='Premium Caption Text'>" +
+                         "<input id='admPremLink' placeholder='Premium / Helpline Link (https://t.me/...)'>" +
+                         "<label style='display:block;margin-top:10px;font-size:12px'>Contact & Security:</label>" +
+                         "<input id='admContact' placeholder='Contact Us Link (https://t.me/helponn_bot)'>" +
+                         "<input id='admNewPass' placeholder='Change Admin Password (optional)'>" +
+                         "<button class='btn' onclick='saveAdmin()'>Save All Settings</button>" +
+                         "<button class='btn' style='background:#64748b' onclick=\"switchTab('home')\">⬅ Back to Home</button></div>" +
                          "</div>" +
+
+                         "<!-- 4 BOTTOM BUTTONS -->" +
+                         "<div class='bottom-nav'>" +
+                         "<button id='nav-home' class='nav-btn active' onclick=\"switchTab('home')\">🏠<span>Home</span></button>" +
+                         "<button id='nav-premium' class='nav-btn' onclick=\"switchTab('premium')\">👑<span>Premium</span></button>" +
+                         "<button id='nav-publisher' class='nav-btn' onclick=\"switchTab('publisher')\">📢<span>Publisher</span></button>" +
+                         "<button id='nav-about' class='nav-btn' onclick=\"switchTab('about')\">ℹ️<span>About Us</span></button>" +
                          "</div>" +
+
                          "<script>" +
                          "const SERVER='" + SERVER_URL + "';" +
-                         "let currentVid=''; let pendingAction=''; let isVip=localStorage.getItem('dx_vip')==='1';" +
-                         "let adCfg=JSON.parse(localStorage.getItem('dx_adcfg')||'{\"on\":true,\"banner\":\"TEST\",\"mrec\":\"TEST\",\"reward\":\"TEST\"}');" +
-                         "function checkPin(){ const p=document.getElementById('pinInput').value; if(p==='1234'){ unlockApp(); } else if(p==='9999'){ unlockApp(); showAdmin(); } else{ alert('Wrong PIN'); } }" +
-                         "function unlockApp(){ document.getElementById('lockScreen').classList.add('hidden'); document.getElementById('mainApp').classList.remove('hidden'); updateVipUI(); renderDownloads(); }" +
-                         "function updateVipUI(){ if(isVip || !adCfg.on){ document.querySelectorAll('.ad-mrec,.ad-banner').forEach(e=>e.classList.add('hidden')); } if(isVip){ document.getElementById('vipBadge').innerText='VIP ACTIVE 👑'; } }" +
-                         "function openFromInput(){ let val=document.getElementById('linkBox').value.trim(); if(!val) return; let id=val.includes('/watch/')?val.split('/watch/')[1].split('?')[0]:val; openUnlocker(id); }" +
-                         "function openUnlocker(id){ currentVid=id; document.getElementById('homeView').classList.add('hidden'); document.getElementById('playerView').classList.add('hidden'); document.getElementById('unlockerView').classList.remove('hidden'); document.getElementById('unlockFileTitle').innerText='File: '+id+'_.mp4'; }" +
-                         "function triggerReward(act){ pendingAction=act; if(isVip || !adCfg.on){ finishRewardAd(); return; } document.getElementById('rewardOverlay').classList.remove('hidden'); document.getElementById('closeAdBtn').classList.add('hidden'); document.getElementById('adUnitLabel').innerText='Unit: '+adCfg.reward; let sec=15; document.getElementById('adTimerText').innerText='Reward in '+sec+'s...'; let iv=setInterval(()=>{ sec--; document.getElementById('adTimerText').innerText=sec>0?'Reward in '+sec+'s...':'Reward Unlocked!'; if(sec<=0){ clearInterval(iv); document.getElementById('closeAdBtn').classList.remove('hidden'); } },1000); }" +
-                         "function finishRewardAd(){ document.getElementById('rewardOverlay').classList.add('hidden'); if(pendingAction==='stream') startPlayer(currentVid); else if(pendingAction==='download'){ alert('Downloading inside DX HUB Vault...'); AndroidBridge.downloadEncryptedVideo(currentVid, currentVid+'_.mp4'); } }" +
-                         "function startPlayer(id){ currentVid=id; document.getElementById('unlockerView').classList.add('hidden'); document.getElementById('homeView').classList.add('hidden'); document.getElementById('playerView').classList.remove('hidden'); document.getElementById('playerTitle').innerText=id+'_.mp4'; let local=AndroidBridge.getLocalVideoPath(id); document.getElementById('vidPlayer').src=local?local:(SERVER+'/stream/'+id); document.getElementById('vidPlayer').play(); fetch(SERVER+'/api/video/'+id).then(r=>r.json()).then(d=>{ let g=document.getElementById('moreGrid'); g.innerHTML=''; (d.more_videos||[]).forEach(v=>{ g.innerHTML+=\"<div class='vitem' onclick=\\\"openUnlocker('\"+v.vid_id+\"')\\\"><img src='\"+SERVER+\"/api/thumb/\"+v.vid_id+\"' onerror=\\\"this.style.display='none'\\\"><div>\"+v.safe_name+\"</div></div>\"; }); }); }" +
-                         "function onDownloadComplete(id, name){ let list=JSON.parse(localStorage.getItem('dx_dl')||'[]'); if(!list.includes(id)) list.push(id); localStorage.setItem('dx_dl', JSON.stringify(list)); alert('Saved in DX HUB Offline Vault!'); renderDownloads(); }" +
-                         "function renderDownloads(){ let list=JSON.parse(localStorage.getItem('dx_dl')||'[]'); let box=document.getElementById('downloadsList'); if(!list.length){ box.innerHTML='No offline videos yet.'; return; } box.innerHTML=list.map(id=>\"<div style='padding:8px;background:#0f172a;border-radius:8px;margin-top:6px;display:flex;justify-content:space-between'><span>🔒 \"+id+\"_.mp4</span><b style='color:#10b981' onclick=\\\"startPlayer('\"+id+\"')\\\">PLAY</b></div>\").join(''); }" +
-                         "function activateVip(){ let k=document.getElementById('vipKeyInput').value.trim(); fetch(SERVER+'/api/verify_vip/'+k).then(r=>r.json()).then(d=>{ if(d.valid){ isVip=true; localStorage.setItem('dx_vip','1'); updateVipUI(); alert('VIP Activated! All Ads Removed.'); } else alert('Invalid or Expired VIP Key'); }); }" +
-                         "function showHome(){ document.getElementById('vidPlayer').pause(); document.getElementById('playerView').classList.add('hidden'); document.getElementById('unlockerView').classList.add('hidden'); document.getElementById('adminView').classList.add('hidden'); document.getElementById('homeView').classList.remove('hidden'); }" +
-                         "function showAdmin(){ document.getElementById('homeView').classList.add('hidden'); document.getElementById('adminView').classList.remove('hidden'); }" +
-                         "function saveAdmin(){ adCfg={on:document.getElementById('admAdsOn').value==='1',banner:document.getElementById('admBanner').value||'TEST',mrec:document.getElementById('admMrec').value||'TEST',reward:document.getElementById('admReward').value||'TEST'}; localStorage.setItem('dx_adcfg',JSON.stringify(adCfg)); alert('Admin Settings Saved!'); showHome(); updateVipUI(); }" +
-                         "setInterval(()=>{ if(!isVip && adCfg.on){ document.getElementById('topBanner').innerText='HEADER BANNER ('+adCfg.banner+') • Refreshed '+new Date().toLocaleTimeString(); document.getElementById('playerMrec').innerHTML='<b>MREC BOX ('+adCfg.mrec+')</b><small>Refreshed '+new Date().toLocaleTimeString()+'</small>'; } },30000);" +
-                         (autoUnlock ? "unlockApp();" : "") +
-                         (!deepVidId.isEmpty() ? "openUnlocker('" + deepVidId + "');" : "") +
+                         "let currentVid=''; let pendingAction=''; let lastTap=0;" +
+                         "let isVip=localStorage.getItem('dx_vip')==='1';" +
+                         "let adminPass=localStorage.getItem('dx_admin_pass')||'dxadmin123';" +
+                         "let cfg=JSON.parse(localStorage.getItem('dx_cfg')||JSON.stringify({" +
+                         "  on:true,banner:'TEST',mrec:'TEST',reward:'TEST'," +
+                         "  cpm:'4.00',ipLimit:'1',viewPct:'100'," +
+                         "  premImg:SERVER+'/api/thumb/premium'," +
+                         "  premCaption:'Remove all Ads for 30 Days (₹299/month).'," +
+                         "  premLink:'https://t.me/helponn_bot'," +
+                         "  contact:'https://t.me/helponn_bot'" +
+                         "}));" +
+
+                         "applyConfig(); renderDownloads();" +
+
+                         "function switchTab(tab){" +
+                         "  ['homeView','premiumView','publisherView','aboutView','vaultView','playerView','adminView'].forEach(id=>document.getElementById(id).classList.add('hidden'));" +
+                         "  ['home','premium','publisher','about'].forEach(t=>{ let el=document.getElementById('nav-'+t); if(el) el.classList.remove('active'); });" +
+                         "  let map={home:'homeView',premium:'premiumView',publisher:'publisherView',about:'aboutView'};" +
+                         "  if(map[tab]){ document.getElementById(map[tab]).classList.remove('hidden'); let nb=document.getElementById('nav-'+tab); if(nb) nb.classList.add('active'); }" +
+                         "  if(tab==='publisher') loadPublisherStats();" +
+                         "}" +
+                         "function handleLogoDoubleClick(){" +
+                         "  let now=Date.now();" +
+                         "  if(now-lastTap<500){ lastTap=0; document.getElementById('adminPassInput').value=''; document.getElementById('adminAuthModal').classList.remove('hidden'); }" +
+                         "  else { lastTap=now; }" +
+                         "}" +
+                         "function verifyAdminPass(){" +
+                         "  if(document.getElementById('adminPassInput').value===adminPass){" +
+                         "    closeModals(); loadAdminFields(); switchTab('admin'); document.getElementById('adminView').classList.remove('hidden');" +
+                         "  } else { alert('Wrong Admin Password'); }" +
+                         "}" +
+                         "function openUserLockModal(){ document.getElementById('userPinInput').value=''; document.getElementById('userLockModal').classList.remove('hidden'); }" +
+                         "function verifyUserPin(){" +
+                         "  if(document.getElementById('userPinInput').value.trim()==='1234'){" +
+                         "    closeModals(); switchTab('none'); document.getElementById('vaultView').classList.remove('hidden'); loadVaultLinks();" +
+                         "  } else { alert('Wrong PIN (Use 1234)'); }" +
+                         "}" +
+                         "function closeModals(){ document.getElementById('adminAuthModal').classList.add('hidden'); document.getElementById('userLockModal').classList.add('hidden'); }" +
+                         "function loadAdminFields(){" +
+                         "  document.getElementById('admAdsOn').value=cfg.on?'1':'0';" +
+                         "  document.getElementById('admBanner').value=cfg.banner||'TEST';" +
+                         "  document.getElementById('admMrec').value=cfg.mrec||'TEST';" +
+                         "  document.getElementById('admReward').value=cfg.reward||'TEST';" +
+                         "  document.getElementById('admCpm').value=cfg.cpm||'4.00';" +
+                         "  document.getElementById('admIpLimit').value=cfg.ipLimit||'1';" +
+                         "  document.getElementById('admViewPct').value=cfg.viewPct||'100';" +
+                         "  document.getElementById('admPremImg').value=cfg.premImg||'';" +
+                         "  document.getElementById('admPremCaption').value=cfg.premCaption||'';" +
+                         "  document.getElementById('admPremLink').value=cfg.premLink||'https://t.me/helponn_bot';" +
+                         "  document.getElementById('admContact').value=cfg.contact||'https://t.me/helponn_bot';" +
+                         "  document.getElementById('admNewPass').value='';" +
+                         "}" +
+                         "function saveAdmin(){" +
+                         "  cfg.on=document.getElementById('admAdsOn').value==='1';" +
+                         "  cfg.banner=document.getElementById('admBanner').value.trim()||'TEST';" +
+                         "  cfg.mrec=document.getElementById('admMrec').value.trim()||'TEST';" +
+                         "  cfg.reward=document.getElementById('admReward').value.trim()||'TEST';" +
+                         "  cfg.cpm=document.getElementById('admCpm').value.trim()||'4.00';" +
+                         "  cfg.ipLimit=document.getElementById('admIpLimit').value.trim()||'1';" +
+                         "  cfg.viewPct=document.getElementById('admViewPct').value.trim()||'100';" +
+                         "  cfg.premImg=document.getElementById('admPremImg').value.trim();" +
+                         "  cfg.premCaption=document.getElementById('admPremCaption').value.trim()||'Remove all Ads (₹299/month).';" +
+                         "  cfg.premLink=document.getElementById('admPremLink').value.trim()||'https://t.me/helponn_bot';" +
+                         "  cfg.contact=document.getElementById('admContact').value.trim()||'https://t.me/helponn_bot';" +
+                         "  let np=document.getElementById('admNewPass').value.trim();" +
+                         "  if(np){ adminPass=np; localStorage.setItem('dx_admin_pass', adminPass); }" +
+                         "  localStorage.setItem('dx_cfg', JSON.stringify(cfg));" +
+                         "  applyConfig(); alert('Saved!'); switchTab('home');" +
+                         "}" +
+                         "function applyConfig(){" +
+                         "  let showAds = (!isVip && cfg.on);" +
+                         "  let miniBox = document.getElementById('globalMiniAd');" +
+                         "  if(showAds){ miniBox.classList.remove('hidden'); document.getElementById('miniAdLabel').innerText=cfg.reward||'TEST'; } else { miniBox.classList.add('hidden'); }" +
+                         "  document.getElementById('premCaptionView').innerText=cfg.premCaption||'Remove all Ads (₹299/month).';" +
+                         "  let imgEl=document.getElementById('premImgView');" +
+                         "  if(cfg.premImg){ imgEl.src=cfg.premImg; imgEl.style.display='block'; }" +
+                         "  document.getElementById('pubCpmText').innerText='$'+(parseFloat(cfg.cpm||4).toFixed(2));" +
+                         "  if(isVip){ document.getElementById('vipBadge').innerText='VIP ACTIVE 👑'; }" +
+                         "}" +
+                         "function openPremiumLink(){ let u=cfg.premLink||'https://t.me/helponn_bot'; if(!u.startsWith('http')) u='https://t.me/'+u.replace(/^@/,''); window.location.href=u; }" +
+                         "function openContactUs(){ let u=cfg.contact||'https://t.me/helponn_bot'; if(!u.startsWith('http')) u='https://t.me/'+u.replace(/^@/,''); window.location.href=u; }" +
+                         "function shareDxApp(){ AndroidBridge.shareText('Download DX HUB App: ' + SERVER); }" +
+                         "function connectTelegramPublisher(){" +
+                         "  let pub=document.getElementById('pubChatInput').value.trim();" +
+                         "  if(!pub){ alert('Enter Telegram / Publisher ID'); return; }" +
+                         "  localStorage.setItem('dx_pub_id', pub);" +
+                         "  loadPublisherStats();" +
+                         "}" +
+                         "function loadPublisherStats(){" +
+                         "  let pub=document.getElementById('pubChatInput').value.trim() || localStorage.getItem('dx_pub_id') || '';" +
+                         "  if(pub) document.getElementById('pubChatInput').value=pub;" +
+                         "  let cpm=parseFloat(cfg.cpm||'4.00')||4.00;" +
+                         "  let pct=Math.max(0, Math.min(100, parseFloat(cfg.viewPct||'100')||100));" +
+                         "  document.getElementById('pubCpmText').innerText='$'+cpm.toFixed(2);" +
+                         "  let listEl=document.getElementById('pubFilesList');" +
+                         "  if(!pub){ listEl.innerHTML=\"<div class='hub-item'>अपना Publisher / Telegram ID डालकर Connect करें।</div>\"; return; }" +
+                         "  fetch(SERVER+'/api/channel/'+encodeURIComponent(pub)).then(r=>r.json()).then(d=>{" +
+                         "    let vids=d.videos||[];" +
+                         "    let rawViews=vids.reduce((s,v)=>s+(parseInt(v.views||0,10)||0),0);" +
+                         "    let counted=Math.round(rawViews*(pct/100));" +
+                         "    let earn=(counted/1000)*cpm;" +
+                         "    document.getElementById('pubViewsText').innerText=counted;" +
+                         "    document.getElementById('pubEarnText').innerText='$'+earn.toFixed(2);" +
+                         "    listEl.innerHTML=vids.map(v=>{" +
+                         "      let link=SERVER+'/watch/'+v.vid_id+'?unlock=DX1234';" +
+                         "      return \"<div class='hub-item'><img src='\"+SERVER+\"/api/thumb/\"+v.vid_id+\"' onerror=\\\"this.style.display='none'\\\"><div><b>\"+v.safe_name+\"</b></div><div class='link-box'>\"+link+\"</div><button class='btn btn-sm btn-blue' onclick=\\\"AndroidBridge.copyToClipboard('\"+link+\"');alert('Copied')\\\">Copy Link</button><button class='btn btn-sm' onclick=\\\"startVideoWithAd('\"+v.vid_id+\"')\\\">Open (Ad)</button></div>\";" +
+                         "    }).join('');" +
+                         "  }).catch(()=>{ listEl.innerHTML=\"<div class='hub-item'>Stats load नहीं हो सके।</div>\"; });" +
+                         "}" +
+                         "function loadVaultLinks(){" +
+                         "  let pub=document.getElementById('vaultPubInput').value.trim() || localStorage.getItem('dx_pub_id') || '';" +
+                         "  if(pub){ document.getElementById('vaultPubInput').value=pub; localStorage.setItem('dx_pub_id', pub); }" +
+                         "  let box=document.getElementById('vaultList');" +
+                         "  if(!pub){ box.innerHTML=\"<div class='hub-item'>Publisher / Telegram ID डालें।</div>\"; return; }" +
+                         "  fetch(SERVER+'/api/channel/'+encodeURIComponent(pub)).then(r=>r.json()).then(d=>{" +
+                         "    let vids=d.videos||[];" +
+                         "    box.innerHTML=vids.map(v=>{" +
+                         "      let link=SERVER+'/watch/'+v.vid_id+'?unlock=DX1234';" +
+                         "      return \"<div class='hub-item'><img src='\"+SERVER+\"/api/thumb/\"+v.vid_id+\"' onerror=\\\"this.style.display='none'\\\"><div><b>\"+v.safe_name+\"</b></div><div class='link-box'>\"+link+\"</div><button class='btn btn-sm btn-blue' onclick=\\\"AndroidBridge.copyToClipboard('\"+link+\"');alert('Copied')\\\">Copy Link</button><button class='btn btn-sm' onclick=\\\"startVideoWithAd('\"+v.vid_id+\"')\\\">Open (Ad)</button></div>\";" +
+                         "    }).join('');" +
+                         "  }).catch(()=>{ box.innerHTML=\"<div class='hub-item'>Load failed.</div>\"; });" +
+                         "}" +
+                         "function openFromInput(){ let val=document.getElementById('linkBox').value.trim(); if(!val) return; let id=val.includes('/watch/')?val.split('/watch/')[1].split('?')[0]:val; startVideoWithAd(id); }" +
+                         "function startVideoWithAd(id){ currentVid=id; triggerReward('stream'); }" +
+                         "function triggerReward(act){" +
+                         "  pendingAction=act; if(isVip || !cfg.on){ finishRewardAd(); return; }" +
+                         "  document.getElementById('rewardOverlay').classList.remove('hidden');" +
+                         "  document.getElementById('closeAdBtn').classList.add('hidden');" +
+                         "  document.getElementById('adUnitLabel').innerText='Unit: '+(cfg.reward||'TEST');" +
+                         "  let sec=15; document.getElementById('adTimerText').innerText='Ad in '+sec+'s...';" +
+                         "  let iv=setInterval(()=>{ sec--; document.getElementById('adTimerText').innerText=sec>0?'Ad in '+sec+'s...':'Ready!'; if(sec<=0){ clearInterval(iv); document.getElementById('closeAdBtn').classList.remove('hidden'); } },1000);" +
+                         "}" +
+                         "function finishRewardAd(){" +
+                         "  document.getElementById('rewardOverlay').classList.add('hidden');" +
+                         "  if(pendingAction==='stream') startPlayer(currentVid);" +
+                         "  else if(pendingAction==='download'){ alert('Downloading...'); AndroidBridge.downloadEncryptedVideo(currentVid, currentVid+'_.mp4'); }" +
+                         "}" +
+                         "function startPlayer(id){" +
+                         "  currentVid=id; switchTab('none'); document.getElementById('playerView').classList.remove('hidden');" +
+                         "  document.getElementById('playerTitle').innerText=id+'_.mp4';" +
+                         "  let local=AndroidBridge.getLocalVideoPath(id);" +
+                         "  document.getElementById('vidPlayer').src=local?local:(SERVER+'/stream/'+id);" +
+                         "  document.getElementById('vidPlayer').play();" +
+                         "}" +
+                         "function onDownloadComplete(id){ let list=JSON.parse(localStorage.getItem('dx_dl')||'[]'); if(!list.includes(id)) list.push(id); localStorage.setItem('dx_dl', JSON.stringify(list)); alert('Saved Offline!'); renderDownloads(); }" +
+                         "function renderDownloads(){ let list=JSON.parse(localStorage.getItem('dx_dl')||'[]'); let box=document.getElementById('downloadsList'); if(!list.length){ box.innerHTML='No offline files yet.'; return; } box.innerHTML=list.map(id=>\"<div style='padding:8px;background:#f0f9ff;border-radius:8px;margin-top:6px;display:flex;justify-content:space-between;border:1px solid #bae6fd'><span>🔒 \"+id+\"_.mp4</span><b style='color:#0284c7' onclick=\\\"startPlayer('\"+id+\"')\\\">PLAY</b></div>\").join(''); }" +
+                         "function activateVip(){ let k=document.getElementById('vipKeyInput').value.trim(); fetch(SERVER+'/api/verify_vip/'+k).then(r=>r.json()).then(d=>{ if(d.valid){ isVip=true; localStorage.setItem('dx_vip','1'); applyConfig(); alert('VIP Activated!'); } else alert('Invalid Key'); }); }" +
+                         (!deepVidId.isEmpty() ? "startVideoWithAd('" + deepVidId + "');" : "") +
                          "</script></body></html>";
               }
           }
