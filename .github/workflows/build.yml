@@ -83,20 +83,10 @@ jobs:
           }
           EOF
 
-          python3 -c '
-          from PIL import Image, ImageDraw, ImageFont
-          for folder, size in [("mipmap-mdpi",48),("mipmap-hdpi",72),("mipmap-xhdpi",96),("mipmap-xxhdpi",144),("mipmap-xxxhdpi",192)]:
-              img = Image.new("RGBA", (size, size), (2, 132, 199, 255))
-              d = ImageDraw.Draw(img)
-              pad = max(2, size // 10)
-              d.rounded_rectangle([pad, pad, size - pad, size - pad], radius=max(6, size // 5), fill=(14, 165, 233, 255), outline=(224, 242, 254, 255), width=max(1, size // 32))
-              txt = "DX"
-              font = ImageFont.load_default()
-              bbox = d.textbbox((0, 0), txt, font=font)
-              tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-              d.text(((size - tw) / 2, (size - th) / 2), txt, fill=(255, 255, 255, 255), font=font)
-              img.save(f"app/src/main/res/{folder}/ic_launcher.png")
-          '
+          ICON_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+          for folder in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            echo "$ICON_B64" | base64 -d > "app/src/main/res/${folder}/ic_launcher.png"
+          done
 
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -326,13 +316,11 @@ jobs:
                          "<button class='lock-btn' onclick='openUserLockModal()'>🔒</button>" +
                          "</div></div>" +
 
-                         "<!-- SHARED MINI VIDEO AD SLOT (Active across pages) -->" +
                          "<div id='globalMiniAd' class='mini-ad-box'>" +
                          "<div style='font-size:11px;font-weight:700'>▶ MINI VIDEO AD (<span id='miniAdLabel'>TEST</span>)</div>" +
                          "<video id='miniAdVideo' class='mini-vid' autoplay muted loop playsinline src='" + SERVER_URL + "/stream/sample'></video>" +
                          "</div>" +
 
-                         "<!-- 1. HOME PAGE -->" +
                          "<div id='homeView'>" +
                          "<div class='card'><h3>🔗 Paste File Link</h3>" +
                          "<input id='linkBox' placeholder='Paste https://dxhub-server.onrender.com/watch/...'>" +
@@ -343,7 +331,6 @@ jobs:
                          "<div id='downloadsList' style='margin-top:10px;font-size:13px;color:#334155'>No offline files yet.</div></div>" +
                          "</div>" +
 
-                         "<!-- 2. PREMIUM PAGE (Custom Image + Caption + Link) -->" +
                          "<div id='premiumView' class='hidden'>" +
                          "<div class='card'><h3>👑 Premium Plan</h3>" +
                          "<img id='premImgView' src='" + SERVER_URL + "/api/thumb/premium' onerror=\"this.style.display='none'\" style='width:100%;height:150px;object-fit:cover;border-radius:10px;margin-top:8px;background:#dbeafe'>" +
@@ -353,7 +340,6 @@ jobs:
                          "<button class='btn btn-blue' onclick='activateVip()'>Activate VIP Key</button></div>" +
                          "</div>" +
 
-                         "<!-- 3. PUBLISHER PAGE (CPM + Dollar Earning + Telegram Connect) -->" +
                          "<div id='publisherView' class='hidden'>" +
                          "<div class='card'><h3>📢 Publisher Dashboard</h3>" +
                          "<p style='font-size:12px;color:#475569;margin-top:4px'>Connect Telegram & track views/earnings</p>" +
@@ -367,7 +353,6 @@ jobs:
                          "<div id='pubFilesList'></div>" +
                          "</div></div>" +
 
-                         "<!-- 4. ABOUT US PAGE (Contact Us + Privacy Policy + Share App) -->" +
                          "<div id='aboutView' class='hidden'>" +
                          "<div class='card'><h3>ℹ️ About DX HUB</h3>" +
                          "<p style='font-size:13px;color:#334155;margin-top:6px'>DX HUB file sharing & media streaming utility.</p>" +
@@ -380,7 +365,6 @@ jobs:
                          "<b>3. Content & Support:</b> Users and publishers are responsible for shared links/files. Reach out via Contact Us for support or policy requests." +
                          "</div></div></div>" +
 
-                         "<!-- PROTECTED LINKS VIEW (Right Lock -> PIN 1234) -->" +
                          "<div id='vaultView' class='hidden'>" +
                          "<div class='card'><h2>🔓 Protected File Links</h2>" +
                          "<input id='vaultPubInput' placeholder='Enter Publisher / Telegram Chat ID'>" +
@@ -388,7 +372,6 @@ jobs:
                          "<button class='btn' style='background:#64748b' onclick=\"switchTab('home')\">⬅ Back to Home</button>" +
                          "<div id='vaultList'></div></div></div>" +
 
-                         "<!-- PLAYER VIEW -->" +
                          "<div id='playerView' class='hidden'>" +
                          "<div id='topBanner' class='ad-banner'>HEADER BANNER AD</div>" +
                          "<video id='vidPlayer' controls playsinline></video>" +
@@ -398,7 +381,6 @@ jobs:
                          "<div class='card'><h3>📂 More Files</h3><div id='moreGrid' class='grid'></div></div>" +
                          "</div>" +
 
-                         "<!-- ADMIN PANEL (2 Taps on DX HUB -> Password) -->" +
                          "<div id='adminView' class='hidden'>" +
                          "<div class='card'><h2>👑 DX HUB Admin Panel</h2>" +
                          "<label style='display:block;margin-top:8px;font-size:12px'>Ads & Mini Video Ad:</label>" +
@@ -421,7 +403,6 @@ jobs:
                          "<button class='btn' style='background:#64748b' onclick=\"switchTab('home')\">⬅ Back to Home</button></div>" +
                          "</div>" +
 
-                         "<!-- 4 BOTTOM BUTTONS -->" +
                          "<div class='bottom-nav'>" +
                          "<button id='nav-home' class='nav-btn active' onclick=\"switchTab('home')\">🏠<span>Home</span></button>" +
                          "<button id='nav-premium' class='nav-btn' onclick=\"switchTab('premium')\">👑<span>Premium</span></button>" +
