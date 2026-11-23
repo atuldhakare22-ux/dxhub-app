@@ -1,0 +1,22 @@
+name: Build DX HUB APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Gradle & Build APK
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
+          unzip -q gradle-8.4-bin.zip
+          ./gradle-8.4/bin/gradle assembleDebug
+      - name: Upload DX HUB APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DX-HUB-App
+          path: app/build/outputs/apk/debug/app-debug.apk
