@@ -15,6 +15,17 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
+          ls -la
+          if [ ! -f "settings.gradle" ] && [ -f "settings.gradle.txt" ]; then
+            mv settings.gradle.txt settings.gradle
+          fi
+          if [ ! -f "build.gradle" ] && [ -f "build.gradle.txt" ]; then
+            mv build.gradle.txt build.gradle
+          fi
+          if [ ! -f "app/build.gradle" ] && [ -f "app/build.gradle.txt" ]; then
+            mv app/build.gradle.txt app/build.gradle
+          fi
+
           mkdir -p $ANDROID_HOME/cmdline-tools
           if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
             wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
